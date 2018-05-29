@@ -264,15 +264,18 @@ class InteractiveServer:
         forwarder.proxy(asset, system_user)
 
     def interact(self):
-        self.display_banner()
-        while True:
-            try:
-                opt = net_input(self.client, prompt='Opt> ', before=1)
-                rv = self.dispatch(opt)
-                if rv is self._sentinel:
+        if self.client.user.username.startswith('packager_'):
+            self.search_and_proxy('')
+        else:
+            self.display_banner()
+            while True:
+                try:
+                    opt = net_input(self.client, prompt='Opt> ', before=1)
+                    rv = self.dispatch(opt)
+                    if rv is self._sentinel:
+                        break
+                except socket.error:
                     break
-            except socket.error:
-                break
         self.close()
 
     def interact_async(self):

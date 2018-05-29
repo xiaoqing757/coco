@@ -24,13 +24,17 @@ class SSHInterface(paramiko.ServerInterface):
         self.event = threading.Event()
         self.auth_valid = False
         self.otp_auth = False
+        self.sms_auth = False
         self.info = None
 
     def check_auth_interactive(self, username, submethods):
         logger.info("Check auth interactive: %s %s" % (username, submethods))
         instructions = 'Please enter 6 digits.'
         interactive = paramiko.server.InteractiveQuery(instructions=instructions)
-        interactive.add_prompt(prompt='[MFA auth]: ')
+        if self.otp_auth:
+            interactive.add_prompt(prompt='[OTP auth]: ')
+        if self.sms_auth:
+            interactive.add_prompt(prompt="[SMS auth]: ")
         return interactive
 
     def check_auth_interactive_response(self, responses):
@@ -39,7 +43,11 @@ class SSHInterface(paramiko.ServerInterface):
         otp_code = responses[0]
         if not otp_code or not len(otp_code) == 6 or not otp_code.isdigit():
             return paramiko.AUTH_FAILED
-        return self.check_auth_otp(otp_code)
+        if self.otp_auth:
+            return self.check_auth_otp(otp_code)
+        if self.sms_auth:
+            return self.check_auth_sms(otp_code)
+        return paramiko.AUTH_FAILED
 
     def check_auth_otp(self, otp_code):
         seed = self.info.get('seed', '')
@@ -51,12 +59,22 @@ class SSHInterface(paramiko.ServerInterface):
             return paramiko.AUTH_SUCCESSFUL
         return paramiko.AUTH_FAILED
 
+    def check_auth_sms(self, code):
+        sms_code = self.info.get('sms_code', '')
+        if not sms_code:
+            return paramiko.AUTH_FAILED
+
+        is_valid = app_service.authenticate_sms(sms_code, code, self.request.remote_ip)
+        if is_valid:
+            return paramiko.AUTH_SUCCESSFUL
+        return paramiko.AUTH_FAILED
+
     def enable_auth_gssapi(self):
         return False
 
     def get_allowed_auths(self, username):
         supported = []
-        if self.otp_auth:
+        if self.otp_auth or self.sms_auth:
             return 'keyboard-interactive'
         if current_app.config["PASSWORD_AUTH"]:
             supported.append("password")
@@ -74,7 +92,7 @@ class SSHInterface(paramiko.ServerInterface):
             return paramiko.AUTH_FAILED
         else:
             logger.info("Password auth <%s> success" % username)
-            if self.otp_auth:
+            if self.otp_auth or self.sms_auth:
                 return paramiko.AUTH_PARTIALLY_SUCCESSFUL
             return paramiko.AUTH_SUCCESSFUL
 
@@ -86,7 +104,7 @@ class SSHInterface(paramiko.ServerInterface):
             return paramiko.AUTH_FAILED
         else:
             logger.debug("Public key auth <%s> success" % username)
-            if self.otp_auth:
+            if self.otp_auth or self.sms_auth:
                 return paramiko.AUTH_PARTIALLY_SUCCESSFUL
             return paramiko.AUTH_SUCCESSFUL
 
@@ -102,8 +120,12 @@ class SSHInterface(paramiko.ServerInterface):
 
         seed = info.get('seed', None)
         token = info.get('token', None)
+        sms_code = info.get('sms_code', None)
         if seed and not token:
             self.otp_auth = True
+
+        if sms_code and not token:
+            self.sms_auth = True
 
         return user
 

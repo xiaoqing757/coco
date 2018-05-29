@@ -77,8 +77,15 @@ class Session:
     def set_replay_recorder(self, recorder):
         self._replay_recorder = recorder
 
+    @property
+    def not_audit(self):
+        request_type = set(self.client.request.type)
+        if "direct-tcpip" in request_type:
+            return True
+        return False
+
     def put_command(self, _input, _output):
-        if not _input:
+        if not _input or self.not_audit:
             return
         self._command_recorder.record({
             "session": self.id,
@@ -91,6 +98,8 @@ class Session:
         })
 
     def put_replay(self, data):
+        if self.not_audit:
+            return
         self._replay_recorder.record({
             "session": self.id,
             "data": data,

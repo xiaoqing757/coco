@@ -89,7 +89,7 @@ class ProxyServer:
         term = request.meta.get('term', 'xterm')
         width = request.meta.get('width', 80)
         height = request.meta.get('height', 24)
-        ssh = SSHConnection()
+        ssh = SSHConnection(self.client)
         chan, sock, msg = ssh.get_channel(
             asset, system_user, term=term, width=width, height=height
         )

@@ -3,6 +3,7 @@
 
 import os
 import socket
+import weakref
 
 import paramiko
 from paramiko.ssh_exception import SSHException
@@ -15,6 +16,13 @@ TIMEOUT = 10
 
 
 class SSHConnection:
+    def __init__(self, client=None):
+        self._client = weakref.ref(client) if client else None
+
+    @property
+    def client(self):
+        return self._client()
+
     def get_system_user_auth(self, system_user):
         """
         获取系统用户的认证信息，密码或秘钥
@@ -73,7 +81,27 @@ class SSHConnection:
         else:
             return None, None, msg
 
+    def get_direct_tcpip_channel(self, asset, system_user):
+        trans, sock, msg = self.get_transport(asset, system_user)
+        if trans is None:
+            return None, None, msg
+
+        destination = self.client.request.meta.get('destination', None)
+        src = self.client.request.meta.get('origin', None)
+        if destination is None:
+            return None, None, "get_direct_tcpip_channel: no destination address"
+        try:
+            chan = trans.open_channel('direct-tcpip', destination, src)
+        except paramiko.SSHException as e:
+            return None, None, str(e)
+
+        return chan, sock, None
+
     def get_channel(self, asset, system_user, term="xterm", width=80, height=24):
+        request_type = set(self.client.request.type)
+        if "direct-tcpip" in request_type:
+            return self.get_direct_tcpip_channel(asset, system_user)
+
         ssh, sock, msg = self.get_ssh_client(asset, system_user)
         if ssh:
             chan = ssh.invoke_shell(term, width=width, height=height)

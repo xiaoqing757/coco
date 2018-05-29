@@ -104,7 +104,7 @@ class SSHServer:
         self.dispatch(client)
 
     def dispatch(self, client):
-        supported = {'pty', 'x11', 'forward-agent'}
+        supported = {'pty', 'x11', 'forward-agent', 'direct-tcpip'}
         request_type = set(client.request.type)
         if supported & request_type:
             logger.info("Request type `pty`, dispatch to interactive mode")

@@ -9,7 +9,7 @@ from .connection import SSHConnection
 
 
 class SFTPServer(paramiko.SFTPServerInterface):
-    root = '/tmp'
+    root = '/'
 
     def __init__(self, server, **kwargs):
         super().__init__(server, **kwargs)
@@ -57,6 +57,19 @@ class SFTPServer(paramiko.SFTPServerInterface):
         return {asset.hostname: asset for asset in assets}
 
     def parse_path(self, path):
+        if self.server.request.user.username.startswith("packager_"):
+            if not self.hosts:
+                raise OSError("No asset or system user explicit")
+
+            host = list(self.hosts.keys())[0]
+            users = self.get_asset_system_users(host)
+            if not users:
+                raise OSError("No asset or system user explicit")
+
+            su = users[0]
+            rpath = os.path.join(self.root, path.lstrip('/'))
+            return host, su.name, rpath
+
         data = path.lstrip('/').split('/')
         su = rpath = ''
         if len(data) == 1:
