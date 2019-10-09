@@ -104,6 +104,11 @@ class InteractiveServer:
                        if is_obj_attr_eq(asset, q)]
             if len(_result) == 1:
                 result = _result
+        if len(result) == 0:
+            _result = [asset for asset in self.assets if q in asset.alias_names]
+            if len(_result) == 1:
+                result = _result
+
 
         # 最后模糊匹配
         if len(result) == 0:
@@ -160,13 +165,15 @@ class InteractiveServer:
     def display_search_result(self):
         sort_by = current_app.config["ASSET_LIST_SORT_BY"]
         self.search_result = sort_assets(self.search_result, sort_by)
-        fake_data = [_("ID"), _("Hostname"), _("IP"), _("LoginAs")]
+        fake_data = [_("ID"), _("Hostname"), _("IP"), _("LoginAs"), "Alias"]
         id_length = max(len(str(len(self.search_result))), 4)
         hostname_length = item_max_length(self.search_result, 15,
                                           key=lambda x: x.hostname)
         sysuser_length = item_max_length(self.search_result,
                                          key=lambda x: x.system_users_name_list)
-        size_list = [id_length, hostname_length, 16, sysuser_length]
+        alias_length = item_max_length(self.search_result, 10, key=lambda x: ','.join(x.alias_names))
+        print("alias length:", alias_length)
+        size_list = [id_length, hostname_length, 16, sysuser_length, alias_length]
         header_without_comment = format_with_zh(size_list, *fake_data)
         comment_length = max(
             self.request.meta["width"] -
@@ -179,7 +186,7 @@ class InteractiveServer:
         for index, asset in enumerate(self.search_result, 1):
             data = [
                 index, asset.hostname, asset.ip,
-                asset.system_users_name_list, asset.comment
+                asset.system_users_name_list, ','.join(asset.alias_names), asset.comment
             ]
             self.client.send(wr(format_with_zh(size_list, *data)))
         self.client.send(wr(_("总共: {} 匹配: {}").format(
